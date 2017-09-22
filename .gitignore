@@ -30,6 +30,7 @@ basic/
 Double_DQN_log/
 *.tar.gz
 *.DS_Store
+.vscode/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
