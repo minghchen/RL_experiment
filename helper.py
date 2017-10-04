@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.random as nr
 import random
 import tensorflow as tf
 #import matplotlib.pyplot as plt
@@ -6,11 +7,66 @@ import scipy.misc
 import os
 import csv
 import itertools
+from collections import deque
 import tensorflow.contrib.slim as slim
 import tensorflow as tf 
 
+########
+# DDPG #
+########
+class Replay_buffer(object):
+    def __init__(self, memory_cap=10000):
+        self.memory_cap = memory_cap
+        self.memory = deque(maxlen=memory_cap)
+    def add_framework(self, ob, ac, next_ob, rew, done):
+        self.memory.append([ob, ac, next_ob, rew, done])
+    def get_batch(self, batch_size=256):
+        if len(self.memory) < 2*batch_size:
+            raise Exception('no enough memory')
+        idx = np.random.permutation(len(self.memory))[:batch_size]
+        extract_mem = lambda k : np.array([self.memory[i][k] for i in idx])
+        ob_batch = extract_mem(0)
+        ac_batch = extract_mem(1)
+        next_ob_batch = extract_mem(2)
+        rew_batch = extract_mem(3)
+        done_batch = extract_mem(4)
+        return ob_batch, ac_batch, next_ob_batch, rew_batch, done_batch
+
+class OUNoise(object):
+    """docstring for OUNoise"""
+    def __init__(self,action_dimension,mu=0, theta=0.15, sigma=0.2):
+        self.action_dimension = action_dimension
+        self.mu = mu
+        self.theta = theta
+        self.sigma = sigma
+        self.state = np.ones(self.action_dimension) * self.mu
+        self.reset()
+
+    def reset(self):
+        self.state = np.ones(self.action_dimension) * self.mu
+
+    def noise(self):
+        x = self.state
+        dx = self.theta * (self.mu - x) + self.sigma * nr.randn(len(x))
+        self.state = x + dx
+        return self.state
+
+########
+# TRPO #
+########
 dtype = tf.float32
 
+def SetFromFlat(theta, scope):
+    var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope)
+    shapes = map(var_shape, var_list)
+    start = 0
+    assigns = []
+    for (shape, v) in zip(shapes, var_list):
+        size = np.prod(shape)
+        assigns.append(v.assign(tf.reshape(theta[start:start+size],shape)))
+        start += size
+    return assigns
+'''
 class SetFromFlat(object):
 
     def __init__(self, session, scope):
@@ -30,7 +86,7 @@ class SetFromFlat(object):
 
     def __call__(self, theta):
         self.session.run(self.op, feed_dict={self.theta: theta})
-
+'''
 
 class GetFlat(object):
 
@@ -91,6 +147,9 @@ def conjugate_gradient(f_Ax, b, cg_iters=10, residual_tol=1e-10):
             break
     return x
 
+########
+# DOOM #
+########
 #This is a simple function to reshape our game frames.
 def processState(state1):
     return np.reshape(state1,[21168])
